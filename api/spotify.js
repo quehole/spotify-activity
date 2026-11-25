@@ -1,7 +1,16 @@
 const sharp = require("sharp");
+const { Resvg } = require("@resvg/resvg-js");
+const fs = require("fs");
+const path = require("path");
 
 const DISCORD_USER_ID =
   process.env.DISCORD_USER_ID || "794143054117601310";
+
+const FONT_PATH = path.join(
+  process.cwd(),
+  "fonts",
+  "Roboto.ttf"
+);
 
 const esc = (value = "") =>
   String(value).replace(/[&<>"']/g, (char) => ({
@@ -20,9 +29,7 @@ async function fetchAlbumArtwork(url) {
 
   try {
     const response = await fetch(url, {
-      headers: {
-        accept: "image/*"
-      },
+      headers: { accept: "image/*" },
       signal: AbortSignal.timeout(8000)
     });
 
@@ -38,7 +45,6 @@ async function fetchAlbumArtwork(url) {
       return null;
     }
 
-    // Convert artwork to PNG for reliable embedding.
     const png = await sharp(buffer)
       .resize(106, 106, {
         fit: "cover",
@@ -55,8 +61,8 @@ async function fetchAlbumArtwork(url) {
 }
 
 function renderCard(spotify, albumArtDataUri = null) {
-  const width = 460;
-  const height = 150;
+  const width = 450;
+  const height = 200;
 
   const active = Boolean(spotify);
 
@@ -71,6 +77,11 @@ function renderCard(spotify, albumArtDataUri = null) {
   const album = active
     ? spotify.album || ""
     : "Connect Spotify to Discord";
+
+  const truncate = (value, max) =>
+    value.length > max
+      ? value.slice(0, max - 3) + "..."
+      : value;
 
   const image = active && albumArtDataUri
     ? `
@@ -108,14 +119,12 @@ function renderCard(spotify, albumArtDataUri = null) {
     spotify.timestamps?.start &&
     spotify.timestamps?.end
   ) {
-    const now = Date.now();
-
     const duration =
       spotify.timestamps.end - spotify.timestamps.start;
 
     if (duration > 0) {
       progress = clamp(
-        (now - spotify.timestamps.start) / duration,
+        (Date.now() - spotify.timestamps.start) / duration,
         0,
         1
       );
@@ -153,23 +162,12 @@ function renderCard(spotify, albumArtDataUri = null) {
     }
   `;
 
-  const truncate = (value, max) =>
-    value.length > max
-      ? value.slice(0, max - 3) + "..."
-      : value;
-
   return `<?xml version="1.0" encoding="UTF-8"?>
 <svg
   xmlns="http://www.w3.org/2000/svg"
   width="${width}"
   height="${height}"
   viewBox="0 0 ${width} ${height}"
-  role="img"
-  aria-label="${esc(
-    active
-      ? `Listening to ${title} by ${artist}`
-      : "Spotify activity is offline"
-  )}"
 >
   <defs>
     <clipPath id="coverClip">
@@ -204,7 +202,7 @@ function renderCard(spotify, albumArtDataUri = null) {
     <text
       x="22"
       y="16"
-      font-family="Arial, Helvetica, sans-serif"
+      font-family="Roboto"
       font-size="9"
       font-weight="700"
       letter-spacing="1.5"
@@ -216,7 +214,7 @@ function renderCard(spotify, albumArtDataUri = null) {
     <text
       x="148"
       y="54"
-      font-family="Arial, Helvetica, sans-serif"
+      font-family="Roboto"
       font-size="16"
       font-weight="700"
       fill="#f5f5f5"
@@ -225,7 +223,7 @@ function renderCard(spotify, albumArtDataUri = null) {
     <text
       x="148"
       y="78"
-      font-family="Arial, Helvetica, sans-serif"
+      font-family="Roboto"
       font-size="12"
       fill="#b7b9bb"
     >${esc(truncate(artist, 42))}</text>
@@ -233,7 +231,7 @@ function renderCard(spotify, albumArtDataUri = null) {
     <text
       x="148"
       y="99"
-      font-family="Arial, Helvetica, sans-serif"
+      font-family="Roboto"
       font-size="10"
       fill="#777d80"
     >${esc(truncate(album, 45))}</text>
@@ -241,7 +239,7 @@ function renderCard(spotify, albumArtDataUri = null) {
     <text
       x="148"
       y="119"
-      font-family="Arial, Helvetica, sans-serif"
+      font-family="Roboto"
       font-size="9"
       font-weight="700"
       letter-spacing="1"
@@ -267,6 +265,10 @@ module.exports = async (req, res) => {
   res.setHeader("Content-Type", "image/png");
 
   try {
+    if (!fs.existsSync(FONT_PATH)) {
+      throw new Error(`Roboto font not found: ${FONT_PATH}`);
+    }
+
     const response = await fetch(
       `https://api.lanyard.rest/v1/users/${DISCORD_USER_ID}`,
       {
@@ -298,9 +300,20 @@ module.exports = async (req, res) => {
 
     const svg = renderCard(spotify, albumArtDataUri);
 
-    const png = await sharp(Buffer.from(svg))
-      .png()
-      .toBuffer();
+    const fontBuffer = fs.readFileSync(FONT_PATH);
+
+    const renderer = new Resvg(svg, {
+      fitTo: {
+        mode: "original"
+      },
+      font: {
+        fontFiles: [FONT_PATH],
+        loadSystemFonts: false,
+        defaultFontFamily: "Roboto"
+      }
+    });
+
+    const png = renderer.render().asPng();
 
     return res.status(200).send(png);
 
@@ -309,11 +322,17 @@ module.exports = async (req, res) => {
 
     try {
       const fallbackSvg = renderCard(null);
-      const fallbackPng = await sharp(Buffer.from(fallbackSvg))
-        .png()
-        .toBuffer();
 
-      return res.status(200).send(fallbackPng);
+      const renderer = new Resvg(fallbackSvg, {
+        font: {
+          fontFiles: [FONT_PATH],
+          loadSystemFonts: false,
+          defaultFontFamily: "Roboto"
+        }
+      });
+
+      return res.status(200).send(renderer.render().asPng());
+
     } catch (fallbackError) {
       console.error("Fallback image error:", fallbackError);
       return res.status(500).send("Unable to generate Spotify card");
