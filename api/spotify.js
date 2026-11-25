@@ -170,7 +170,7 @@ function renderCard(spotify, albumArtDataUri = null) {
   // Fixed minimum height, dynamically expanded for long text.
   const height = Math.max(
     240,
-    textContentHeight + 151
+    textContentHeight + 150
   );
 
   // Main layout.
