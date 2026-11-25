@@ -117,25 +117,230 @@ async function fetchAlbumArtwork(url) {
   }
 }
 
-function renderCard(spotify, albumArtDataUri = null) {
+
+// ==========================================
+// IDLE CARD
+// ==========================================
+
+function renderIdleCard() {
   const width = 460;
-  const active = Boolean(spotify);
+  const height = 240;
 
-  const title = active
-    ? spotify.song || "Unknown track"
-    : "Not listening right now";
+  return `<?xml version="1.0" encoding="UTF-8"?>
+  <svg
+    xmlns="http://www.w3.org/2000/svg"
+    width="${width}"
+    height="${height}"
+    viewBox="0 0 ${width} ${height}"
+  >
 
-  const artist = active
-    ? spotify.artist || "Unknown artist"
-    : "Spotify activity will appear here";
+    <defs>
+      <linearGradient
+        id="background"
+        x1="0"
+        y1="0"
+        x2="1"
+        y2="1"
+      >
+        <stop offset="0%" stop-color="#1C2022"/>
+        <stop offset="100%" stop-color="#111415"/>
+      </linearGradient>
 
-  const album = active
-    ? spotify.album || ""
-    : "Connect Spotify to Discord";
+      <linearGradient
+        id="idleAccent"
+        x1="0"
+        y1="0"
+        x2="1"
+        y2="1"
+      >
+        <stop offset="0%" stop-color="#252D2A"/>
+        <stop offset="100%" stop-color="#19211E"/>
+      </linearGradient>
+    </defs>
+
+    <!-- Background -->
+    <rect
+      x="0.5"
+      y="0.5"
+      width="459"
+      height="239"
+      rx="20"
+      fill="url(#background)"
+      stroke="#343A3D"
+      stroke-width="1"
+    />
+
+    <!-- Header -->
+    <circle
+      cx="27"
+      cy="29"
+      r="4"
+      fill="#777F83"
+    />
+
+    <text
+      x="39"
+      y="33"
+      font-family="Roboto"
+      font-size="10"
+      font-weight="700"
+      letter-spacing="1.6"
+      fill="#E0E4E6"
+    >SPOTIFY ACTIVITY</text>
+
+    <text
+      x="436"
+      y="33"
+      font-family="Roboto"
+      font-size="10"
+      font-weight="700"
+      letter-spacing="1.3"
+      fill="#777F83"
+      text-anchor="end"
+    >IDLE</text>
+
+    <!-- Header separator -->
+    <line
+      x1="24"
+      y1="49"
+      x2="436"
+      y2="49"
+      stroke="#303638"
+      stroke-width="1"
+    />
+
+    <!-- Icon container -->
+    <rect
+      x="40"
+      y="77"
+      width="86"
+      height="86"
+      rx="19"
+      fill="url(#idleAccent)"
+      stroke="#303A35"
+      stroke-width="1"
+    />
+
+    <!-- Music icon -->
+    <g
+      transform="translate(83 120)"
+      fill="none"
+      stroke="#1ED760"
+      stroke-width="3.5"
+      stroke-linecap="round"
+      stroke-linejoin="round"
+    >
+      <path d="M-12 8V-10L8-14V4"/>
+      <ellipse
+        cx="-17"
+        cy="10"
+        rx="5"
+        ry="4"
+        fill="#1ED760"
+        stroke="none"
+      />
+      <ellipse
+        cx="3"
+        cy="6"
+        rx="5"
+        ry="4"
+        fill="#1ED760"
+        stroke="none"
+      />
+    </g>
+
+    <!-- Main text -->
+    <text
+      x="151"
+      y="111"
+      font-family="Roboto"
+      font-size="21"
+      font-weight="700"
+      fill="#FFFFFF"
+    >Not listening right now</text>
+
+    <text
+      x="151"
+      y="137"
+      font-family="Roboto"
+      font-size="13"
+      font-weight="400"
+      fill="#92999E"
+    >Your listening activity will appear here.</text>
+
+    <!-- Status -->
+    <circle
+      cx="155"
+      cy="166"
+      r="3"
+      fill="#777F83"
+    />
+
+    <text
+      x="165"
+      y="170"
+      font-family="Roboto"
+      font-size="10"
+      font-weight="500"
+      letter-spacing="0.6"
+      fill="#777F83"
+    >WAITING FOR PLAYBACK</text>
+
+    <!-- Footer separator -->
+    <line
+      x1="24"
+      y1="196"
+      x2="436"
+      y2="196"
+      stroke="#2A3032"
+      stroke-width="1"
+    />
+
+    <text
+      x="24"
+      y="218"
+      font-family="Roboto"
+      font-size="10"
+      font-weight="500"
+      fill="#777F83"
+    >LIVE LISTENING STATUS</text>
+
+    <text
+      x="436"
+      y="218"
+      font-family="Roboto"
+      font-size="10"
+      font-weight="500"
+      fill="#777F83"
+      text-anchor="end"
+    >POWERED BY SPOTIFY</text>
+
+  </svg>`;
+}
+
+
+// ==========================================
+// ACTIVE SPOTIFY CARD
+// ==========================================
+
+function renderCard(spotify, albumArtDataUri = null) {
+
+  // Use a separate fixed layout when idle.
+  if (!spotify) {
+    return renderIdleCard();
+  }
+
+  const width = 460;
+  const active = true;
+
+  const title = spotify.song || "Unknown track";
+  const artist = spotify.artist || "Unknown artist";
+  const album = spotify.album || "";
 
   // Typography and text wrapping.
   const titleLines = wrapText(title, 22);
   const artistLines = wrapText(artist, 30);
+
   const albumLines = album
     ? wrapText(album, 34)
     : [];
@@ -167,7 +372,7 @@ function renderCard(spotify, albumArtDataUri = null) {
     gapArtistAlbum +
     albumHeight;
 
-  // Fixed minimum height, dynamically expanded for long text.
+  // Dynamic height for longer text.
   const height = Math.max(
     240,
     textContentHeight + 150
@@ -176,6 +381,7 @@ function renderCard(spotify, albumArtDataUri = null) {
   // Main layout.
   const artworkSize = 132;
   const artworkX = 24;
+
   const artworkY = Math.round(
     (height - artworkSize) / 2
   );
@@ -183,7 +389,9 @@ function renderCard(spotify, albumArtDataUri = null) {
   const textX = 182;
   const textTop = 66;
   const textBottom = height - 64;
-  const availableTextHeight = textBottom - textTop;
+
+  const availableTextHeight =
+    textBottom - textTop;
 
   let textY =
     textTop +
@@ -279,24 +487,18 @@ function renderCard(spotify, albumArtDataUri = null) {
 
   const filledWidth = progressWidth * progress;
 
-  const elapsedText = active
-    ? formatTime(elapsed)
-    : "0:00";
-
-  const durationText = active
-    ? formatTime(duration)
-    : "0:00";
+  const elapsedText = formatTime(elapsed);
+  const durationText = formatTime(duration);
 
   // Spotify link.
-  const spotifyUrl =
-    active && spotify.track_id
-      ? `https://open.spotify.com/track/${encodeURIComponent(
-          spotify.track_id
-        )}`
-      : "https://open.spotify.com/";
+  const spotifyUrl = spotify.track_id
+    ? `https://open.spotify.com/track/${encodeURIComponent(
+        spotify.track_id
+      )}`
+    : "https://open.spotify.com/";
 
   // Album artwork.
-  const image = active && albumArtDataUri
+  const image = albumArtDataUri
     ? `
       <rect
         x="${artworkX - 1}"
@@ -339,174 +541,184 @@ function renderCard(spotify, albumArtDataUri = null) {
     `;
 
   return `<?xml version="1.0" encoding="UTF-8"?>
-<svg
-  xmlns="http://www.w3.org/2000/svg"
-  width="${width}"
-  height="${height}"
-  viewBox="0 0 ${width} ${height}"
->
-  <defs>
-    <linearGradient
-      id="background"
-      x1="0"
-      y1="0"
-      x2="1"
-      y2="1"
-    >
-      <stop offset="0%" stop-color="#1C2022"/>
-      <stop offset="100%" stop-color="#111415"/>
-    </linearGradient>
+  <svg
+    xmlns="http://www.w3.org/2000/svg"
+    width="${width}"
+    height="${height}"
+    viewBox="0 0 ${width} ${height}"
+  >
 
-    <linearGradient
-      id="progress"
-      x1="0"
-      y1="0"
-      x2="1"
-      y2="0"
-    >
-      <stop offset="0%" stop-color="#1ED760"/>
-      <stop offset="100%" stop-color="#39E982"/>
-    </linearGradient>
+    <defs>
 
-    <clipPath id="coverClip">
-      <rect
-        x="${artworkX}"
-        y="${artworkY}"
-        width="${artworkSize}"
-        height="${artworkSize}"
-        rx="16"
-      />
-    </clipPath>
-  </defs>
+      <linearGradient
+        id="background"
+        x1="0"
+        y1="0"
+        x2="1"
+        y2="1"
+      >
+        <stop offset="0%" stop-color="#1C2022"/>
+        <stop offset="100%" stop-color="#111415"/>
+      </linearGradient>
 
-  <!-- Card background -->
-  <rect
-    x="0.5"
-    y="0.5"
-    width="459"
-    height="${height - 1}"
-    rx="20"
-    fill="url(#background)"
-    stroke="#343A3D"
-    stroke-width="1"
-  />
+      <linearGradient
+        id="progress"
+        x1="0"
+        y1="0"
+        x2="1"
+        y2="0"
+      >
+        <stop offset="0%" stop-color="#1ED760"/>
+        <stop offset="100%" stop-color="#39E982"/>
+      </linearGradient>
 
-  <!-- Header -->
-  <circle
-    cx="27"
-    cy="29"
-    r="4"
-    fill="#1ED760"
-  />
+      <clipPath id="coverClip">
+        <rect
+          x="${artworkX}"
+          y="${artworkY}"
+          width="${artworkSize}"
+          height="${artworkSize}"
+          rx="16"
+        />
+      </clipPath>
 
-  <text
-    x="39"
-    y="33"
-    font-family="Roboto"
-    font-size="10"
-    font-weight="700"
-    letter-spacing="1.6"
-    fill="#E0E4E6"
-  >NOW PLAYING</text>
+    </defs>
 
-  <text
-    x="414"
-    y="33"
-    font-family="Roboto"
-    font-size="10"
-    font-weight="700"
-    letter-spacing="1.3"
-    fill="#777F83"
-    text-anchor="end"
-  >SPOTIFY</text>
-
-  <!-- Header separator -->
-  <line
-    x1="24"
-    y1="49"
-    x2="436"
-    y2="49"
-    stroke="#303638"
-    stroke-width="1"
-  />
-
-  <!-- Album artwork -->
-  ${image}
-
-  <!-- Song information -->
-  ${titleMarkup}
-  ${artistMarkup}
-  ${albumMarkup}
-
-  <!-- Playback section -->
-  <line
-    x1="24"
-    y1="${height - 57}"
-    x2="436"
-    y2="${height - 57}"
-    stroke="#2A3032"
-    stroke-width="1"
-  />
-
-  <!-- Progress track -->
-  <rect
-    x="${progressX}"
-    y="${progressY}"
-    width="${progressWidth}"
-    height="4"
-    rx="2"
-    fill="#343B3D"
-  />
-
-  <!-- Progress fill -->
-  ${
-    active
-      ? `<rect
-          x="${progressX}"
-          y="${progressY}"
-          width="${filledWidth.toFixed(2)}"
-          height="4"
-          rx="2"
-          fill="url(#progress)"
-        />`
-      : ""
-  }
-
-  <!-- Playback timestamps -->
-  <text
-    x="${progressX}"
-    y="${height - 17}"
-    font-family="Roboto"
-    font-size="10"
-    font-weight="500"
-    fill="#92999E"
-  >${elapsedText}</text>
-
-  <text
-    x="${progressX + progressWidth}"
-    y="${height - 17}"
-    font-family="Roboto"
-    font-size="10"
-    font-weight="500"
-    fill="#92999E"
-    text-anchor="end"
-  >${durationText}</text>
-
-  <!-- Clickable Spotify area -->
-  <a href="${esc(spotifyUrl)}">
+    <!-- Card background -->
     <rect
-      x="1"
-      y="1"
-      width="458"
-      height="${height - 2}"
+      x="0.5"
+      y="0.5"
+      width="459"
+      height="${height - 1}"
       rx="20"
-      fill="transparent"
+      fill="url(#background)"
+      stroke="#343A3D"
+      stroke-width="1"
     />
-  </a>
-</svg>`;
+
+    <!-- Header -->
+    <circle
+      cx="27"
+      cy="29"
+      r="4"
+      fill="#1ED760"
+    />
+
+    <text
+      x="39"
+      y="33"
+      font-family="Roboto"
+      font-size="10"
+      font-weight="700"
+      letter-spacing="1.6"
+      fill="#E0E4E6"
+    >NOW PLAYING</text>
+
+    <text
+      x="414"
+      y="33"
+      font-family="Roboto"
+      font-size="10"
+      font-weight="700"
+      letter-spacing="1.3"
+      fill="#777F83"
+      text-anchor="end"
+    >SPOTIFY</text>
+
+    <!-- Header separator -->
+    <line
+      x1="24"
+      y1="49"
+      x2="436"
+      y2="49"
+      stroke="#303638"
+      stroke-width="1"
+    />
+
+    <!-- Album artwork -->
+    ${image}
+
+    <!-- Song information -->
+    ${titleMarkup}
+    ${artistMarkup}
+    ${albumMarkup}
+
+    <!-- Playback section -->
+    <line
+      x1="24"
+      y1="${height - 57}"
+      x2="436"
+      y2="${height - 57}"
+      stroke="#2A3032"
+      stroke-width="1"
+    />
+
+    <!-- Progress track -->
+    <rect
+      x="${progressX}"
+      y="${progressY}"
+      width="${progressWidth}"
+      height="4"
+      rx="2"
+      fill="#343B3D"
+    />
+
+    <!-- Progress fill -->
+    ${
+      active
+        ? `
+          <rect
+            x="${progressX}"
+            y="${progressY}"
+            width="${filledWidth.toFixed(2)}"
+            height="4"
+            rx="2"
+            fill="url(#progress)"
+          />
+        `
+        : ""
+    }
+
+    <!-- Playback timestamps -->
+    <text
+      x="${progressX}"
+      y="${height - 17}"
+      font-family="Roboto"
+      font-size="10"
+      font-weight="500"
+      fill="#92999E"
+    >${elapsedText}</text>
+
+    <text
+      x="${progressX + progressWidth}"
+      y="${height - 17}"
+      font-family="Roboto"
+      font-size="10"
+      font-weight="500"
+      fill="#92999E"
+      text-anchor="end"
+    >${durationText}</text>
+
+    <!-- Clickable Spotify area -->
+    <a href="${esc(spotifyUrl)}">
+      <rect
+        x="1"
+        y="1"
+        width="458"
+        height="${height - 2}"
+        rx="20"
+        fill="transparent"
+      />
+    </a>
+
+  </svg>`;
 }
 
-// Render SVG into PNG with Roboto.
+
+// ==========================================
+// RENDER SVG INTO PNG
+// ==========================================
+
 function renderPNG(svg) {
   const renderer = new Resvg(svg, {
     fitTo: {
@@ -522,8 +734,13 @@ function renderPNG(svg) {
   return renderer.render().asPng();
 }
 
-// API endpoint.
+
+// ==========================================
+// API ENDPOINT
+// ==========================================
+
 module.exports = async (req, res) => {
+
   res.setHeader(
     "Cache-Control",
     "no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0, s-maxage=0"
@@ -536,6 +753,7 @@ module.exports = async (req, res) => {
   res.setHeader("Content-Type", "image/png");
 
   try {
+
     if (!fs.existsSync(FONT_PATH)) {
       throw new Error(
         `Roboto font not found: ${FONT_PATH}`
@@ -590,15 +808,18 @@ module.exports = async (req, res) => {
     return res.status(200).send(png);
 
   } catch (error) {
+
     console.error("Spotify activity error:", error);
 
     try {
+
       const fallbackSvg = renderCard(null);
       const fallbackPng = renderPNG(fallbackSvg);
 
       return res.status(200).send(fallbackPng);
 
     } catch (fallbackError) {
+
       console.error(
         "Fallback image error:",
         fallbackError
@@ -607,6 +828,7 @@ module.exports = async (req, res) => {
       return res.status(500).send(
         "Unable to generate Spotify card"
       );
+
     }
   }
 };
