@@ -1,3 +1,5 @@
+const sharp = require("sharp");
+
 const DISCORD_USER_ID =
   process.env.DISCORD_USER_ID || "794143054117601310";
 
@@ -13,7 +15,46 @@ const esc = (value = "") =>
 const clamp = (value, min, max) =>
   Math.min(max, Math.max(min, value));
 
-function renderCard(spotify) {
+async function fetchAlbumArtwork(url) {
+  if (!url) return null;
+
+  try {
+    const response = await fetch(url, {
+      headers: {
+        accept: "image/*"
+      },
+      signal: AbortSignal.timeout(8000)
+    });
+
+    if (!response.ok) return null;
+
+    const contentType = response.headers.get("content-type") || "";
+
+    if (!contentType.startsWith("image/")) return null;
+
+    const buffer = Buffer.from(await response.arrayBuffer());
+
+    if (!buffer.length || buffer.length > 5 * 1024 * 1024) {
+      return null;
+    }
+
+    // Convert artwork to PNG for reliable embedding.
+    const png = await sharp(buffer)
+      .resize(106, 106, {
+        fit: "cover",
+        position: "centre"
+      })
+      .png()
+      .toBuffer();
+
+    return `data:image/png;base64,${png.toString("base64")}`;
+  } catch (error) {
+    console.error("Album artwork error:", error);
+    return null;
+  }
+}
+
+function renderCard(spotify, albumArtDataUri = null) {
   const width = 460;
   const height = 150;
 
@@ -31,11 +72,10 @@ function renderCard(spotify) {
     ? spotify.album || ""
     : "Connect Spotify to Discord";
 
-  const image = active && spotify.album_art_url
+  const image = active && albumArtDataUri
     ? `
       <image
-        href="${esc(spotify.album_art_url)}"
-        xlink:href="${esc(spotify.album_art_url)}"
+        href="${albumArtDataUri}"
         x="22"
         y="22"
         width="106"
@@ -121,7 +161,6 @@ function renderCard(spotify) {
   return `<?xml version="1.0" encoding="UTF-8"?>
 <svg
   xmlns="http://www.w3.org/2000/svg"
-  xmlns:xlink="http://www.w3.org/1999/xlink"
   width="${width}"
   height="${height}"
   viewBox="0 0 ${width} ${height}"
@@ -143,7 +182,7 @@ function renderCard(spotify) {
     </linearGradient>
   </defs>
 
-  <a href="${esc(spotifyUrl)}" target="_blank">
+  <a href="${esc(spotifyUrl)}">
 
     <rect
       x="0.5"
@@ -216,7 +255,6 @@ function renderCard(spotify) {
 }
 
 module.exports = async (req, res) => {
-  // Prevent browser and intermediary caching.
   res.setHeader(
     "Cache-Control",
     "no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0, s-maxage=0"
@@ -226,7 +264,7 @@ module.exports = async (req, res) => {
   res.setHeader("Expires", "0");
   res.setHeader("Surrogate-Control", "no-store");
   res.setHeader("Access-Control-Allow-Origin", "*");
-  res.setHeader("Content-Type", "image/svg+xml; charset=utf-8");
+  res.setHeader("Content-Type", "image/png");
 
   try {
     const response = await fetch(
@@ -254,11 +292,31 @@ module.exports = async (req, res) => {
       ? payload.data.spotify
       : null;
 
-    return res.status(200).send(renderCard(spotify));
+    const albumArtDataUri = spotify?.album_art_url
+      ? await fetchAlbumArtwork(spotify.album_art_url)
+      : null;
+
+    const svg = renderCard(spotify, albumArtDataUri);
+
+    const png = await sharp(Buffer.from(svg))
+      .png()
+      .toBuffer();
+
+    return res.status(200).send(png);
 
   } catch (error) {
     console.error("Spotify activity error:", error);
 
-    return res.status(200).send(renderCard(null));
+    try {
+      const fallbackSvg = renderCard(null);
+      const fallbackPng = await sharp(Buffer.from(fallbackSvg))
+        .png()
+        .toBuffer();
+
+      return res.status(200).send(fallbackPng);
+    } catch (fallbackError) {
+      console.error("Fallback image error:", fallbackError);
+      return res.status(500).send("Unable to generate Spotify card");
+    }
   }
 };
