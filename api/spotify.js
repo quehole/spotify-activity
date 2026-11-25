@@ -162,7 +162,7 @@ function renderCard(spotify, albumArtDataUri = null) {
   // Height adjusts automatically to the content.
 const height = Math.max(
   270,
-  textContentHeight + 110
+  textContentHeight + 100
 );
 
   // Artwork positioning.
