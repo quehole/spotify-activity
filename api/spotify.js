@@ -25,47 +25,6 @@ const esc = (value = "") =>
 const clamp = (value, min, max) =>
   Math.min(max, Math.max(min, value));
 
-// Fetch and convert album artwork.
-async function fetchAlbumArtwork(url) {
-  if (!url) return null;
-
-  try {
-    const response = await fetch(url, {
-      headers: { accept: "image/*" },
-      signal: AbortSignal.timeout(8000)
-    });
-
-    if (!response.ok) return null;
-
-    const contentType =
-      response.headers.get("content-type") || "";
-
-    if (!contentType.startsWith("image/")) return null;
-
-    const buffer = Buffer.from(
-      await response.arrayBuffer()
-    );
-
-    if (!buffer.length || buffer.length > 5 * 1024 * 1024) {
-      return null;
-    }
-
-    const png = await sharp(buffer)
-      .resize(112, 112, {
-        fit: "cover",
-        position: "centre"
-      })
-      .png()
-      .toBuffer();
-
-    return `data:image/png;base64,${png.toString("base64")}`;
-  } catch (error) {
-    console.error("Album artwork error:", error);
-    return null;
-  }
-}
-
-// Wrap text into lines.
 function wrapText(value, maxChars) {
   const words = String(value).split(/\s+/);
   const lines = [];
@@ -102,7 +61,62 @@ function wrapText(value, maxChars) {
   return lines.length ? lines : [""];
 }
 
-// Generate the Spotify card.
+function formatTime(milliseconds) {
+  const seconds = Math.max(
+    0,
+    Math.floor(milliseconds / 1000)
+  );
+
+  const minutes = Math.floor(seconds / 60);
+  const remainingSeconds = seconds % 60;
+
+  return `${minutes}:${String(remainingSeconds).padStart(2, "0")}`;
+}
+
+async function fetchAlbumArtwork(url) {
+  if (!url) return null;
+
+  try {
+    const response = await fetch(url, {
+      headers: {
+        accept: "image/*"
+      },
+      signal: AbortSignal.timeout(8000)
+    });
+
+    if (!response.ok) return null;
+
+    const contentType =
+      response.headers.get("content-type") || "";
+
+    if (!contentType.startsWith("image/")) {
+      return null;
+    }
+
+    const buffer = Buffer.from(
+      await response.arrayBuffer()
+    );
+
+    if (!buffer.length || buffer.length > 5 * 1024 * 1024) {
+      return null;
+    }
+
+    const png = await sharp(buffer)
+      .resize(132, 132, {
+        fit: "cover",
+        position: "centre"
+      })
+      .png()
+      .toBuffer();
+
+    return `data:image/png;base64,${png.toString("base64")}`;
+
+  } catch (error) {
+    console.error("Album artwork error:", error);
+    return null;
+  }
+}
+
 function renderCard(spotify, albumArtDataUri = null) {
   const width = 460;
   const active = Boolean(spotify);
@@ -119,23 +133,24 @@ function renderCard(spotify, albumArtDataUri = null) {
     ? spotify.album || ""
     : "Connect Spotify to Discord";
 
-  // Larger typography with more readable line spacing.
-  const titleLines = wrapText(title, 25);
-  const artistLines = wrapText(artist, 34);
+  // Typography and text wrapping.
+  const titleLines = wrapText(title, 22);
+  const artistLines = wrapText(artist, 30);
   const albumLines = album
-    ? wrapText(album, 39)
+    ? wrapText(album, 34)
     : [];
 
-  const titleSize = 21;
+  const titleSize = 23;
   const artistSize = 16;
-  const albumSize = 14;
-  const statusSize = 10;
+  const albumSize = 13;
 
-  const titleLineHeight = 27;
-  const artistLineHeight = 22;
+  const titleLineHeight = 29;
+  const artistLineHeight = 23;
   const albumLineHeight = 19;
 
-  // Calculate the complete text block height.
+  const gapTitleArtist = 10;
+  const gapArtistAlbum = 7;
+
   const titleHeight =
     titleLines.length * titleLineHeight;
 
@@ -145,49 +160,39 @@ function renderCard(spotify, albumArtDataUri = null) {
   const albumHeight =
     albumLines.length * albumLineHeight;
 
-  const gapTitleArtist = 7;
-  const gapArtistAlbum = 5;
-  const gapAlbumStatus = 13;
-  const statusHeight = 14;
-
   const textContentHeight =
     titleHeight +
     gapTitleArtist +
     artistHeight +
     gapArtistAlbum +
-    albumHeight +
-    gapAlbumStatus +
-    statusHeight;
+    albumHeight;
 
-  // Height adjusts automatically to the content.
-const height = Math.max(
-  250,
-  textContentHeight + 110
-);
+  // Fixed minimum height, dynamically expanded for long text.
+  const height = Math.max(
+    240,
+    textContentHeight + 151
+  );
 
-  // Artwork positioning.
-  const artworkSize = 112;
-  const artworkX = 22;
+  // Main layout.
+  const artworkSize = 132;
+  const artworkX = 24;
   const artworkY = Math.round(
     (height - artworkSize) / 2
   );
 
-  // Text positioning.
-  const textX = 154;
-
-  // Center the entire text block in the available space.
-  const contentTop = 48;
-  const contentBottom = height - 38;
-  const contentAreaHeight = contentBottom - contentTop;
+  const textX = 182;
+  const textTop = 66;
+  const textBottom = height - 64;
+  const availableTextHeight = textBottom - textTop;
 
   let textY =
-    contentTop +
+    textTop +
     Math.max(
       0,
-      (contentAreaHeight - textContentHeight) / 2
+      (availableTextHeight - textContentHeight) / 2
     );
 
-  // Generate SVG text elements.
+  // Text generation.
   function makeText(
     lines,
     fontSize,
@@ -231,7 +236,7 @@ const height = Math.max(
     artistLines,
     artistSize,
     artistLineHeight,
-    "#D1D5D8",
+    "#D7DADD",
     500
   );
 
@@ -242,44 +247,47 @@ const height = Math.max(
         albumLines,
         albumSize,
         albumLineHeight,
-        "#AEB5BA",
+        "#92999E",
         400
       )
     : "";
 
-  textY += gapAlbumStatus;
-
-  const statusY = textY + statusHeight - 2;
-
-  // Spotify playback progress.
+  // Playback information.
   let progress = 0;
+  let elapsed = 0;
+  let duration = 0;
 
   if (
     active &&
     spotify.timestamps?.start &&
     spotify.timestamps?.end
   ) {
-    const duration =
-      spotify.timestamps.end -
-      spotify.timestamps.start;
+    const start = spotify.timestamps.start;
+    const end = spotify.timestamps.end;
+
+    duration = Math.max(0, end - start);
+    elapsed = clamp(Date.now() - start, 0, duration);
 
     if (duration > 0) {
-      progress = clamp(
-        (Date.now() - spotify.timestamps.start) /
-          duration,
-        0,
-        1
-      );
+      progress = elapsed / duration;
     }
   }
 
-  // Full-width progress bar.
-  const progressX = 22;
-  const progressBarWidth = 416;
-  const progressY = height - 21;
-  const progressWidth = progressBarWidth * progress;
+  const progressX = 24;
+  const progressWidth = 412;
+  const progressY = height - 39;
 
-  // Spotify track link.
+  const filledWidth = progressWidth * progress;
+
+  const elapsedText = active
+    ? formatTime(elapsed)
+    : "0:00";
+
+  const durationText = active
+    ? formatTime(duration)
+    : "0:00";
+
+  // Spotify link.
   const spotifyUrl =
     active && spotify.track_id
       ? `https://open.spotify.com/track/${encodeURIComponent(
@@ -287,9 +295,18 @@ const height = Math.max(
         )}`
       : "https://open.spotify.com/";
 
-  // Album artwork or fallback.
+  // Album artwork.
   const image = active && albumArtDataUri
     ? `
+      <rect
+        x="${artworkX - 1}"
+        y="${artworkY - 1}"
+        width="${artworkSize + 2}"
+        height="${artworkSize + 2}"
+        rx="17"
+        fill="#343A3D"
+      />
+
       <image
         href="${albumArtDataUri}"
         x="${artworkX}"
@@ -306,16 +323,19 @@ const height = Math.max(
         y="${artworkY}"
         width="${artworkSize}"
         height="${artworkSize}"
-        rx="13"
-        fill="#202326"
+        rx="16"
+        fill="#222729"
       />
 
-      <g transform="translate(${artworkX + 28} ${artworkY + 30}) scale(0.055)">
-        <path
-          fill="#1ed760"
-          d="M512 0C229.2 0 0 229.2 0 512s229.2 512 512 512 512-229.2 512-512S794.8 0 512 0zm234.6 738.4a31.8 31.8 0 0 1-43.8 10.6c-120-73.4-271-90-449.4-49.4a31.9 31.9 0 1 1-14.2-62.2c195-44.6 362.2-25.2 496.8 57.2a31.9 31.9 0 0 1 10.6 43.8zm62.4-138.8a39.8 39.8 0 0 1-54.8 13.2c-137.4-84.4-347-108.8-509.6-59.6a39.9 39.9 0 1 1-23.2-76.4c185.8-56.4 416.8-29.2 574.4 67.6a39.9 39.9 0 0 1 13.2 55.2zm5.4-144.4c-164.8-97.8-436.8-107-594.2-59.2a47.9 47.9 0 1 1-27.8-91.6c180.8-54.8 481.4-44.2 671.4 68.6a47.9 47.9 0 0 1-49.4 82.2z"
-        />
-      </g>
+      <text
+        x="${artworkX + artworkSize / 2}"
+        y="${artworkY + 78}"
+        font-family="Roboto"
+        font-size="46"
+        font-weight="700"
+        fill="#1ED760"
+        text-anchor="middle"
+      >♫</text>
     `;
 
   return `<?xml version="1.0" encoding="UTF-8"?>
@@ -326,100 +346,167 @@ const height = Math.max(
   viewBox="0 0 ${width} ${height}"
 >
   <defs>
+    <linearGradient
+      id="background"
+      x1="0"
+      y1="0"
+      x2="1"
+      y2="1"
+    >
+      <stop offset="0%" stop-color="#1C2022"/>
+      <stop offset="100%" stop-color="#111415"/>
+    </linearGradient>
+
+    <linearGradient
+      id="progress"
+      x1="0"
+      y1="0"
+      x2="1"
+      y2="0"
+    >
+      <stop offset="0%" stop-color="#1ED760"/>
+      <stop offset="100%" stop-color="#39E982"/>
+    </linearGradient>
+
     <clipPath id="coverClip">
       <rect
         x="${artworkX}"
         y="${artworkY}"
         width="${artworkSize}"
         height="${artworkSize}"
-        rx="13"
+        rx="16"
       />
     </clipPath>
-
-    <linearGradient
-      id="bg"
-      x1="0"
-      y1="0"
-      x2="1"
-      y2="1"
-    >
-      <stop offset="0" stop-color="#1B1E20"/>
-      <stop offset="1" stop-color="#111314"/>
-    </linearGradient>
   </defs>
 
+  <!-- Card background -->
+  <rect
+    x="0.5"
+    y="0.5"
+    width="459"
+    height="${height - 1}"
+    rx="20"
+    fill="url(#background)"
+    stroke="#343A3D"
+    stroke-width="1"
+  />
+
+  <!-- Header -->
+  <circle
+    cx="27"
+    cy="29"
+    r="4"
+    fill="#1ED760"
+  />
+
+  <text
+    x="39"
+    y="33"
+    font-family="Roboto"
+    font-size="10"
+    font-weight="700"
+    letter-spacing="1.6"
+    fill="#E0E4E6"
+  >NOW PLAYING</text>
+
+  <text
+    x="414"
+    y="33"
+    font-family="Roboto"
+    font-size="10"
+    font-weight="700"
+    letter-spacing="1.3"
+    fill="#777F83"
+    text-anchor="end"
+  >SPOTIFY</text>
+
+  <!-- Header separator -->
+  <line
+    x1="24"
+    y1="49"
+    x2="436"
+    y2="49"
+    stroke="#303638"
+    stroke-width="1"
+  />
+
+  <!-- Album artwork -->
+  ${image}
+
+  <!-- Song information -->
+  ${titleMarkup}
+  ${artistMarkup}
+  ${albumMarkup}
+
+  <!-- Playback section -->
+  <line
+    x1="24"
+    y1="${height - 57}"
+    x2="436"
+    y2="${height - 57}"
+    stroke="#2A3032"
+    stroke-width="1"
+  />
+
+  <!-- Progress track -->
+  <rect
+    x="${progressX}"
+    y="${progressY}"
+    width="${progressWidth}"
+    height="4"
+    rx="2"
+    fill="#343B3D"
+  />
+
+  <!-- Progress fill -->
+  ${
+    active
+      ? `<rect
+          x="${progressX}"
+          y="${progressY}"
+          width="${filledWidth.toFixed(2)}"
+          height="4"
+          rx="2"
+          fill="url(#progress)"
+        />`
+      : ""
+  }
+
+  <!-- Playback timestamps -->
+  <text
+    x="${progressX}"
+    y="${height - 17}"
+    font-family="Roboto"
+    font-size="10"
+    font-weight="500"
+    fill="#92999E"
+  >${elapsedText}</text>
+
+  <text
+    x="${progressX + progressWidth}"
+    y="${height - 17}"
+    font-family="Roboto"
+    font-size="10"
+    font-weight="500"
+    fill="#92999E"
+    text-anchor="end"
+  >${durationText}</text>
+
+  <!-- Clickable Spotify area -->
   <a href="${esc(spotifyUrl)}">
-
     <rect
-      x="0.5"
-      y="0.5"
-      width="459"
-      height="${height - 1}"
-      rx="17"
-      fill="url(#bg)"
-      stroke="#34393C"
+      x="1"
+      y="1"
+      width="458"
+      height="${height - 2}"
+      rx="20"
+      fill="transparent"
     />
-
-    <text
-      x="22"
-      y="24"
-      font-family="Roboto"
-      font-size="10"
-      font-weight="700"
-      letter-spacing="1.5"
-      fill="#1ED760"
-    >SPOTIFY ${active ? "NOW PLAYING" : "ACTIVITY"}</text>
-
-    <circle
-      cx="421"
-      cy="20"
-      r="5"
-      fill="${active ? "#1ED760" : "#777777"}"
-    />
-
-    ${image}
-
-    ${titleMarkup}
-    ${artistMarkup}
-    ${albumMarkup}
-
-    <text
-      x="${textX}"
-      y="${statusY}"
-      font-family="Roboto"
-      font-size="${statusSize}"
-      font-weight="700"
-      letter-spacing="1"
-      fill="${active ? "#1ED760" : "#AEB5BA"}"
-    >${active ? "LISTENING ON SPOTIFY" : "NOT LISTENING"}</text>
-
-    <rect
-      x="${progressX}"
-      y="${progressY}"
-      width="${progressBarWidth}"
-      height="4"
-      rx="2"
-      fill="#343A3C"
-    />
-
-    ${
-      active
-        ? `<rect
-            x="${progressX}"
-            y="${progressY}"
-            width="${progressWidth.toFixed(2)}"
-            height="4"
-            rx="2"
-            fill="#1ED760"
-          />`
-        : ""
-    }
-
   </a>
 </svg>`;
 }
 
-// Render SVG into PNG using Roboto.
+// Render SVG into PNG with Roboto.
 function renderPNG(svg) {
   const renderer = new Resvg(svg, {
     fitTo: {
@@ -455,7 +542,7 @@ module.exports = async (req, res) => {
       );
     }
 
-    // Get Discord presence from Lanyard.
+    // Fetch Discord presence.
     const response = await fetch(
       `https://api.lanyard.rest/v1/users/${DISCORD_USER_ID}`,
       {
@@ -492,7 +579,7 @@ module.exports = async (req, res) => {
           )
         : null;
 
-    // Generate and render card.
+    // Generate PNG.
     const svg = renderCard(
       spotify,
       albumArtDataUri
