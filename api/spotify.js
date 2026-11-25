@@ -25,15 +25,13 @@ const esc = (value = "") =>
 const clamp = (value, min, max) =>
   Math.min(max, Math.max(min, value));
 
-// Fetch and convert album artwork into an embedded PNG.
+// Fetch and convert album artwork.
 async function fetchAlbumArtwork(url) {
   if (!url) return null;
 
   try {
     const response = await fetch(url, {
-      headers: {
-        accept: "image/*"
-      },
+      headers: { accept: "image/*" },
       signal: AbortSignal.timeout(8000)
     });
 
@@ -42,9 +40,7 @@ async function fetchAlbumArtwork(url) {
     const contentType =
       response.headers.get("content-type") || "";
 
-    if (!contentType.startsWith("image/")) {
-      return null;
-    }
+    if (!contentType.startsWith("image/")) return null;
 
     const buffer = Buffer.from(
       await response.arrayBuffer()
@@ -55,7 +51,7 @@ async function fetchAlbumArtwork(url) {
     }
 
     const png = await sharp(buffer)
-      .resize(106, 106, {
+      .resize(112, 112, {
         fit: "cover",
         position: "centre"
       })
@@ -63,14 +59,13 @@ async function fetchAlbumArtwork(url) {
       .toBuffer();
 
     return `data:image/png;base64,${png.toString("base64")}`;
-
   } catch (error) {
     console.error("Album artwork error:", error);
     return null;
   }
 }
 
-// Wrap text into multiple lines.
+// Wrap text into lines.
 function wrapText(value, maxChars) {
   const words = String(value).split(/\s+/);
   const lines = [];
@@ -107,7 +102,7 @@ function wrapText(value, maxChars) {
   return lines.length ? lines : [""];
 }
 
-// Generate the Spotify card SVG.
+// Generate the Spotify card.
 function renderCard(spotify, albumArtDataUri = null) {
   const width = 460;
   const active = Boolean(spotify);
@@ -124,39 +119,75 @@ function renderCard(spotify, albumArtDataUri = null) {
     ? spotify.album || ""
     : "Connect Spotify to Discord";
 
-  // Text layout.
-  const titleLines = wrapText(title, 32);
-  const artistLines = wrapText(artist, 43);
-  const albumLines = wrapText(album, 47);
+  // Larger typography with more readable line spacing.
+  const titleLines = wrapText(title, 25);
+  const artistLines = wrapText(artist, 34);
+  const albumLines = album
+    ? wrapText(album, 39)
+    : [];
 
-  const titleLineHeight = 20;
-  const artistLineHeight = 17;
-  const albumLineHeight = 15;
+  const titleSize = 21;
+  const artistSize = 16;
+  const albumSize = 14;
+  const statusSize = 10;
+
+  const titleLineHeight = 27;
+  const artistLineHeight = 22;
+  const albumLineHeight = 19;
+
+  // Calculate the complete text block height.
+  const titleHeight =
+    titleLines.length * titleLineHeight;
+
+  const artistHeight =
+    artistLines.length * artistLineHeight;
+
+  const albumHeight =
+    albumLines.length * albumLineHeight;
+
+  const gapTitleArtist = 7;
+  const gapArtistAlbum = 5;
+  const gapAlbumStatus = 13;
+  const statusHeight = 14;
 
   const textContentHeight =
-    titleLines.length * titleLineHeight +
-    8 +
-    artistLines.length * artistLineHeight +
-    7 +
-    albumLines.length * albumLineHeight +
-    12;
+    titleHeight +
+    gapTitleArtist +
+    artistHeight +
+    gapArtistAlbum +
+    albumHeight +
+    gapAlbumStatus +
+    statusHeight;
 
-  // Height grows automatically when text needs more space.
+  // Height adjusts automatically to the content.
   const height = Math.max(
-    180,
-    48 + textContentHeight + 71
+    190,
+    textContentHeight + 86
   );
 
-  // Album artwork positioning.
-  const artworkSize = 106;
+  // Artwork positioning.
+  const artworkSize = 112;
+  const artworkX = 22;
   const artworkY = Math.round(
     (height - artworkSize) / 2
   );
 
-  const textX = 148;
-  let textY = 42;
+  // Text positioning.
+  const textX = 154;
 
-  // Generate text markup.
+  // Center the entire text block in the available space.
+  const contentTop = 48;
+  const contentBottom = height - 38;
+  const contentAreaHeight = contentBottom - contentTop;
+
+  let textY =
+    contentTop +
+    Math.max(
+      0,
+      (contentAreaHeight - textContentHeight) / 2
+    );
+
+  // Generate SVG text elements.
   function makeText(
     lines,
     fontSize,
@@ -188,35 +219,39 @@ function renderCard(spotify, albumArtDataUri = null) {
 
   const titleMarkup = makeText(
     titleLines,
-    16,
+    titleSize,
     titleLineHeight,
-    "#f5f5f5",
+    "#FFFFFF",
     700
   );
 
-  textY += 8;
+  textY += gapTitleArtist;
 
   const artistMarkup = makeText(
     artistLines,
-    12,
+    artistSize,
     artistLineHeight,
-    "#b7b9bb"
+    "#D1D5D8",
+    500
   );
 
-  textY += 7;
+  textY += gapArtistAlbum;
 
-  const albumMarkup = makeText(
-    albumLines,
-    10,
-    albumLineHeight,
-    "#777d80"
-  );
+  const albumMarkup = albumLines.length
+    ? makeText(
+        albumLines,
+        albumSize,
+        albumLineHeight,
+        "#AEB5BA",
+        400
+      )
+    : "";
 
-  textY += 12;
+  textY += gapAlbumStatus;
 
-  const statusY = textY + 9;
+  const statusY = textY + statusHeight - 2;
 
-  // Calculate Spotify playback progress.
+  // Spotify playback progress.
   let progress = 0;
 
   if (
@@ -238,7 +273,11 @@ function renderCard(spotify, albumArtDataUri = null) {
     }
   }
 
-  const progressWidth = 376 * progress;
+  // Full-width progress bar.
+  const progressX = 22;
+  const progressBarWidth = 416;
+  const progressY = height - 21;
+  const progressWidth = progressBarWidth * progress;
 
   // Spotify track link.
   const spotifyUrl =
@@ -253,7 +292,7 @@ function renderCard(spotify, albumArtDataUri = null) {
     ? `
       <image
         href="${albumArtDataUri}"
-        x="22"
+        x="${artworkX}"
         y="${artworkY}"
         width="${artworkSize}"
         height="${artworkSize}"
@@ -263,24 +302,21 @@ function renderCard(spotify, albumArtDataUri = null) {
     `
     : `
       <rect
-        x="22"
+        x="${artworkX}"
         y="${artworkY}"
         width="${artworkSize}"
         height="${artworkSize}"
-        rx="12"
-        fill="#202020"
+        rx="13"
+        fill="#202326"
       />
 
-      <g transform="translate(48 ${artworkY + 27}) scale(0.055)">
+      <g transform="translate(${artworkX + 28} ${artworkY + 30}) scale(0.055)">
         <path
           fill="#1ed760"
           d="M512 0C229.2 0 0 229.2 0 512s229.2 512 512 512 512-229.2 512-512S794.8 0 512 0zm234.6 738.4a31.8 31.8 0 0 1-43.8 10.6c-120-73.4-271-90-449.4-49.4a31.9 31.9 0 1 1-14.2-62.2c195-44.6 362.2-25.2 496.8 57.2a31.9 31.9 0 0 1 10.6 43.8zm62.4-138.8a39.8 39.8 0 0 1-54.8 13.2c-137.4-84.4-347-108.8-509.6-59.6a39.9 39.9 0 1 1-23.2-76.4c185.8-56.4 416.8-29.2 574.4 67.6a39.9 39.9 0 0 1 13.2 55.2zm5.4-144.4c-164.8-97.8-436.8-107-594.2-59.2a47.9 47.9 0 1 1-27.8-91.6c180.8-54.8 481.4-44.2 671.4 68.6a47.9 47.9 0 0 1-49.4 82.2z"
         />
       </g>
     `;
-
-  // Progress bar stays near the bottom.
-  const progressY = height - 18;
 
   return `<?xml version="1.0" encoding="UTF-8"?>
 <svg
@@ -292,11 +328,11 @@ function renderCard(spotify, albumArtDataUri = null) {
   <defs>
     <clipPath id="coverClip">
       <rect
-        x="22"
+        x="${artworkX}"
         y="${artworkY}"
         width="${artworkSize}"
         height="${artworkSize}"
-        rx="12"
+        rx="13"
       />
     </clipPath>
 
@@ -307,8 +343,8 @@ function renderCard(spotify, albumArtDataUri = null) {
       x2="1"
       y2="1"
     >
-      <stop offset="0" stop-color="#191b1d"/>
-      <stop offset="1" stop-color="#101112"/>
+      <stop offset="0" stop-color="#1B1E20"/>
+      <stop offset="1" stop-color="#111314"/>
     </linearGradient>
   </defs>
 
@@ -319,27 +355,27 @@ function renderCard(spotify, albumArtDataUri = null) {
       y="0.5"
       width="459"
       height="${height - 1}"
-      rx="16"
+      rx="17"
       fill="url(#bg)"
-      stroke="#303438"
-    />
-
-    <circle
-      cx="421"
-      cy="31"
-      r="5"
-      fill="${active ? "#1ed760" : "#777777"}"
+      stroke="#34393C"
     />
 
     <text
       x="22"
-      y="16"
+      y="24"
       font-family="Roboto"
-      font-size="9"
+      font-size="10"
       font-weight="700"
       letter-spacing="1.5"
-      fill="#1ed760"
+      fill="#1ED760"
     >SPOTIFY ${active ? "NOW PLAYING" : "ACTIVITY"}</text>
+
+    <circle
+      cx="421"
+      cy="20"
+      r="5"
+      fill="${active ? "#1ED760" : "#777777"}"
+    />
 
     ${image}
 
@@ -348,33 +384,33 @@ function renderCard(spotify, albumArtDataUri = null) {
     ${albumMarkup}
 
     <text
-      x="148"
+      x="${textX}"
       y="${statusY}"
       font-family="Roboto"
-      font-size="9"
+      font-size="${statusSize}"
       font-weight="700"
       letter-spacing="1"
-      fill="${active ? "#1ed760" : "#929292"}"
+      fill="${active ? "#1ED760" : "#AEB5BA"}"
     >${active ? "LISTENING ON SPOTIFY" : "NOT LISTENING"}</text>
 
     <rect
-      x="22"
+      x="${progressX}"
       y="${progressY}"
-      width="376"
-      height="3"
-      rx="1.5"
-      fill="#343434"
+      width="${progressBarWidth}"
+      height="4"
+      rx="2"
+      fill="#343A3C"
     />
 
     ${
       active
         ? `<rect
-            x="22"
+            x="${progressX}"
             y="${progressY}"
             width="${progressWidth.toFixed(2)}"
-            height="3"
-            rx="1.5"
-            fill="#1ed760"
+            height="4"
+            rx="2"
+            fill="#1ED760"
           />`
         : ""
     }
@@ -383,7 +419,7 @@ function renderCard(spotify, albumArtDataUri = null) {
 </svg>`;
 }
 
-// Render SVG into PNG using the embedded Roboto font.
+// Render SVG into PNG using Roboto.
 function renderPNG(svg) {
   const renderer = new Resvg(svg, {
     fitTo: {
@@ -456,7 +492,7 @@ module.exports = async (req, res) => {
           )
         : null;
 
-    // Generate card.
+    // Generate and render card.
     const svg = renderCard(
       spotify,
       albumArtDataUri
@@ -467,10 +503,7 @@ module.exports = async (req, res) => {
     return res.status(200).send(png);
 
   } catch (error) {
-    console.error(
-      "Spotify activity error:",
-      error
-    );
+    console.error("Spotify activity error:", error);
 
     try {
       const fallbackSvg = renderCard(null);
